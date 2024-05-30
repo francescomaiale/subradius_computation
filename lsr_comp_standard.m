@@ -1,4 +1,4 @@
-function [lsr,m,err] = lsr_comp_standard(A, dA, delta, M, V, err)
+function [lsr,p,err] = lsr_comp_standard(A, dA, delta, M, V, err, display)
 
 % This function computed a lower and upper bound for the lower spectral radius of a matrix family {A_1, ..., A_m}
 
@@ -38,6 +38,10 @@ if nargin < 6
   err = [];
 end
 
+if nargin < 7
+    display=1;
+end
+
 %% Check if the matrix A has the correct dimension
 
 [ma,na] = size(A); % ma = number of rows (or columns) of each A_i, so if the input is correct na/ma should coincide with the number of elements of the family
@@ -59,12 +63,12 @@ end
 %% Adjust the relative errors in evaluating products and antinorms and the error in the norm of A.
 
 if  size(err)*[1;1] < 3
-    err = [2^(-50)*n,2^(-49)*n];
+    err = [2^(-50)*d,2^(-49)*d];
 end
 
 dA = dA(:);
 
-if  size(dA)*[1;0] == n
+if  size(dA)*[1;0] == d
   prop = 0;
 else 
   prop = 1;
@@ -79,13 +83,13 @@ end
 X = []; % Initialize to store matrices
 
 H_Radius = inf; % Initial guess for the upper bound
-L_Radius = = 0; % Initial guess for the lower bound
+L_Radius = 0; % Initial guess for the lower bound
 
 antinorm = zeros(m,1); lowbound = zeros(m,1); antinorm_error = zeros(m,1); % Preallocate space
 
 for i = 1:m
 
-  Y = A(:,(i-1)*n+1:i*n); % Set Y = A_i
+  Y = A(:,(i-1)*d+1:i*d); % Set Y = A_i
   
   [aN,~]=aNorm(Y,V); % Compute the antinorm of Y with respect to the polytope antinorm which correponds to the vertex set V
   
@@ -128,7 +132,7 @@ while n_op < M && L_Radius < H_Radius - delta
 
   H_Radius_Old = H_Radius; L_Radius_Old = L_Radius; % Store the previous upper and lower bound to later establish if 1) the gap has improved and 2) the upper bound has improved.
   
-  LowRadius = HighRadius; 
+  L_Radius = H_Radius; 
 
   NewJ = 0; % Use this variable to count how many products of degree n + 1 are evaluated by the algorithm.
 
@@ -139,7 +143,7 @@ while n_op < M && L_Radius < H_Radius - delta
 
      NJJN = NewJ + 1; % This keeps track of all generated product of length n. It is different from NewJ because NewJ counts product that make the cut of the algorithm and will be used in the next step to generate products of length n+1; NJJN, on the other hand, counts all products of length n generated here, even those that are discarded later.
      
-     Y = X((k-1)*n+1:k*n,:)*A(:,(i-1)*n+1:i*n); % Product of length n
+     Y = X((k-1)*d+1:k*d,:)*A(:,(i-1)*d+1:i*d); % Product of length n
 
      antinorm_error_new(NJJN) = (antinorm(k)*(err(1)*antinorm_A(i)+dA(i)) + antinorm(k)*(antinorm_A(i)+dA(i)));
 
@@ -158,7 +162,7 @@ while n_op < M && L_Radius < H_Radius - delta
      end
 
     end
-  end
+ end
 
   X = NewX; % Replace the matrices stored previosly (X) with the new ones to prepare for the next iteration.
 
@@ -180,7 +184,13 @@ while n_op < M && L_Radius < H_Radius - delta
   if H_Radius < H_Radius_Old
       ell_slp=n; % Update the optimal upper bound degree if the upper bound decreases
   end
-
+  
+  if display
+      disp([BestPower,ell_slp,n,n_op,J]);
+      disp([L_Radius,H_Radius]);
+  end
+  
+end
 
 p = [BestPower,ell_slp,n,n_op,MaxJ];
 lsr = [L_Radius,H_Radius];
