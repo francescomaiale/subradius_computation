@@ -1,4 +1,9 @@
 function [lsr,p,err,vertex_set] = adaptive_subradius_comp(A,dA,delta,M,vertex_set,err,display)
+% This file is part of the subradius_computation project.
+% Copyright (c) 2024 Francesco Paolo Maiale
+% This source code is licensed under the GNU General Public License v3.0. See the LICENSE file for more details.
+
+
 % This function (Algorithm (A) in the main paper) computes a lower and upper bound for the 
 % lower spectral radius of a matrix family {A_1, ..., A_m} starting from an initial polytope antinorm and 
 % refining it adaptively.
