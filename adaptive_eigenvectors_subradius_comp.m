@@ -1,4 +1,8 @@
 function [lsr,p,err,vertex_set] = adaptive_eigenvectors_subradius_comp(A,dA,delta,M,vertex_set,err,display,theta)
+% This file is part of the subradius_computation project.
+% Copyright (c) 2024 Francesco Paolo Maiale
+% This source code is licensed under the GNU General Public License v3.0. See the LICENSE file for more details.
+
 % This function (Algorithm (E) in the main paper) computes a lower and upper bound for the lower spectral radius of a matrix family {A_1, ..., A_m} starting from an initial polytope antinorm and refining it adaptively.
 % This differs from adaptive_subradius_comp.m because it refines the antinorm by also adding the leading eigenvectors of
 % all matrix products that yield an improvement to the upper bound.
