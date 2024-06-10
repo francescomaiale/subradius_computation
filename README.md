@@ -9,3 +9,7 @@ This directory contains all MATLAB scripts' that are necessary to recreate the s
 - adaptive_eigenvectors_subradius_comp.m is another adaptive variant, which further refines the antinorm by adding suitably rescaled eigenvectors. NOTE: as mentioned in the paper, this is the only variant that does not have a theoretical result which guarantees convergence.
 
 The file illustrative_example.m can easily be modified to apply one (or all) algorithm(s) to a different matrix family. In that case, replace A_1 and A_2 accordingly and, since the LSR is likely not known, renormalize the family using, for example, the result of "min(a(A_1),a(A_2))", where a() is the polytope antinorm chosen as the initial one. Note that V_in must be changed to define the new antinorm and, for a family of dxd matrices, it should be a dxp matrix, where the p columns are the vertices.
+
+This project is licensed under the GNU General Public License v3.0. You are free to use, modify, and distribute the code for both non-commercial and commercial purposes. However, the authors provide no warranties and disclaim any liability for the code's use.
+
+Please see the LICENSE file for more details.
