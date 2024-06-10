@@ -1,7 +1,7 @@
 function [lsr,p,err] = lsr_comp_standard(A, dA, delta, M, V, err, display)
-
 % This function computes a lower and upper bound for the lower spectral radius of a matrix family {A_1, ..., A_m}.
 % It corresponds to Algoritm 4.1 in the main paper.
+
 
 %% Input
 % A = [A_1, ..., A_m], given by horizontal concatenation of the matrices
@@ -17,17 +17,16 @@ function [lsr,p,err] = lsr_comp_standard(A, dA, delta, M, V, err, display)
     
 
 %% Check if there are any errors in the input values
-
 if nargin < 2
-  dA = [];
+     dA = [];
 end
 
 if nargin < 3
-  delta = 1e-6 
+    delta = 1e-6 
 end
 
 if nargin < 4
-  M = 500;
+    M = 500;
 end
 
 % If no vertex set is given to this function, the 1-antinorm is the standard choice
@@ -36,7 +35,7 @@ if nargin < 5
 end
 
 if nargin < 6
-  err = [];
+    err = [];
 end
 
 if nargin < 7
@@ -48,17 +47,15 @@ end
 [ma,na] = size(A); % ma = number of rows (or columns) of each A_i, so if the input is correct na/ma should coincide with the number of elements of the family
 
 if (na > ma && rem(na,ma) == 0)
-  m = fix(na/ma); % number of elements of the family
-  d = ma; % each matrix in the family is (d x d)
-  
+    m = fix(na/ma); % number of elements of the family
+    d = ma; % each matrix in the family is (d x d)
 elseif (ma > na && rem(ma,na) == 0)  happens when the input A has been given as vertical concatenation of the matrices A_i. Considering A transpose solves the issue:
-  A = A';
-  m = fix(ma/na);
-  d = na;
-  
+    A = A';
+    m = fix(ma/na);
+    d = na;
 else % if neither situation happens, there is an error in the input A
- disp('The matrix has wrong dimensions');
- return;
+    disp('The matrix has wrong dimensions');
+    return;
 end
 
 
@@ -70,12 +67,12 @@ end
 dA = dA(:);
 
 if  size(dA)*[1;0] == d
-  prop = 0;
+    prop = 0;
 else 
-  prop = 1;
-  if size(dA)*[1;0] == 0 % if the input is dA = [], then dA is set equal to the eps-precision of the machine.
-    dA = eps;
-  end
+    prop = 1;
+    if size(dA)*[1;0] == 0 % if the input is dA = [], then dA is set equal to the eps-precision of the machine.
+        dA = eps;
+    end
 end
 
 
@@ -88,24 +85,19 @@ L_Radius = 0; % initial guess for the lower bound
 antinorm = zeros(m,1); lowbound = zeros(m,1); antinorm_err = zeros(m,1); % preallocate space
 
 for i = 1:m
-
-  Y = A(:,(i-1)*d+1:i*d); % set Y := A_i
+    Y = A(:,(i-1)*d+1:i*d); % set Y := A_i
+    [aN,~] = matrix_antinorm(Y,V); % compute the antinorm of Y with respect to the polytope antinorm which correponds to the vertex set V
+    antinorm(i) = aN * (1 + err(2));
+    lowbound(i) = antinorm(i);
   
-  [aN,~] = matrix_antinorm(Y,V); % compute the antinorm of Y with respect to the polytope antinorm which correponds to the vertex set V
-  
-  antinorm(i) = aN * (1 + err(2));
-  lowbound(i) = antinorm(i);
-  
-  if prop
-    antinorm_err(i) = dA(1) * antinorm(i);
-  else
-    antinorm_err(i) = dA(i);
-  end
+    if prop
+        antinorm_err(i) = dA(1) * antinorm(i);
+    else
+        antinorm_err(i) = dA(i);
+    end
 
-  H_Radius = min(H_Radius,abs(eigs(Y,1,'largestabs'))); % update the upper bound as the minimum between the previous upper bound and the spectral radius of Y=A_i
- 
-  X = [X; Y]; % add Y to the storage X
-
+    H_Radius = min(H_Radius,abs(eigs(Y,1,'largestabs'))); % update the upper bound as the minimum between the previous upper bound and the spectral radius of Y=A_i
+    X = [X; Y]; % add Y to the storage X
 end
 
 
@@ -125,7 +117,6 @@ ell_slp = 1; % keeps track of the degree yielding the optimal upper bound
 
 %% Main loop of the algorithm
 while n_op < M && L_Radius < H_Radius - delta
-
     n = n + 1; % increase n as we start to explore products of degree n+1
     H_Radius_Old = H_Radius; L_Radius_Old = L_Radius; % store the previous upper and lower bound to later establish if 1) the gap has improved and 2) the upper bound has improved
     L_Radius = H_Radius; 
