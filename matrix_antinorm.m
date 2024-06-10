@@ -16,13 +16,13 @@ function [anorm,z] = matrix_antinorm(A,V)
 
     
 p = size(V,2); % Number of vertices
-c = zeros(j,1); % Auxiliary vector to store the antinorm of A*v_i for all i = 1,...,p
+c = zeros(p,1); % Auxiliary vector to store the antinorm of A*v_i for all i = 1,...,p
 
 for i = 1:p
     
     try
         
-    [~,upper,~] = real_antinorm(V,Y*V(:,i)); % Antinorm of A*v_i
+    [~,upper,~] = real_antinorm(V,A*V(:,i)); % Antinorm of A*v_i
     c(i,1) = upper; % Store the value in the auxiliary vector
     
     catch ME % If there is any error, print a message and skip to the next iteration
@@ -36,6 +36,6 @@ end
 
 [anorm,I] = min(c(:,1)); % Compute the minimum value of a(A*v_i) with respect to i and denote by I the index such that min = a(A*v_I)
 
-z = Y*V(:,I); % Candidate new vertex
+z = A*V(:,I); % Candidate new vertex
 
 end
