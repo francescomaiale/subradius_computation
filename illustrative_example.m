@@ -35,7 +35,7 @@ end
 
 %% Algorithm A with initial antinorm the 1-antinorm
 
-M = [50 500 1000];
+M = [100 500 1000];
 
 V_adaptive_A = []; % To store the adaptive antinorms obtained at the end of the algorithm for all values of M
 
