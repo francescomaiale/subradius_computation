@@ -6,26 +6,27 @@ function [anorm,z] = matrix_antinorm(A,V)
 
 %% Input
 % A is a dxd real matrix for which we want to compute the antinorm
-% V is a dxp real matrix which contains the p vertices defining the polytope antinorm as columns.
+% V is a dxp real matrix which contains the p vertices defining the polytope antinorm as columns
 
 
 %% Output
-% anorm is the antinorm of the matrix A
-% z is the candidate new vertex in Algorithm A (lsr_comp_adaptive.m) and Algorithm E (lsr_comp_adaptive_eigenvectors.m) and coincides with A*v_i, where v_i is the column of V achieving the minimum in the computation of the antinorm
+% anorm = antinorm of the matrix A
+% z is the candidate new vertex in Algorithm A (adaptive_subradius_comp.m) and Algorithm E (adaptive_eigenvectors_subradius_comp.m)
+% and coincides with A*v_i, where v_i is the column of V achieving the minimum in the computation of the antinorm
 
 
     
-p = size(V,2); % Number of vertices
-c = zeros(p,1); % Auxiliary vector to store the antinorm of A*v_i for all i = 1,...,p
+p = size(V,2); % number of vertices
+c = zeros(p,1); % auxiliary vector that stores the antinorm of A*v_i for all i = 1,...,p
 
 for i = 1:p
     
     try
         
-    [~,upper,~] = real_antinorm(V,A*V(:,i)); % Antinorm of A*v_i
-    c(i,1) = upper; % Store the value in the auxiliary vector
+    [~,upper,~] = real_antinorm(V,A*V(:,i)); % compute the antinorm of A*v_i
+    c(i,1) = upper; % store the value in the auxiliary vector
     
-    catch ME % If there is any error, print a message and skip to the next iteration
+    catch ME % if there is any error, print a message and skip to the next iteration
         
         fprintf('Error on iteration %d: %s\n', i, ME.message);
         continue;
@@ -34,8 +35,8 @@ for i = 1:p
     
 end
 
-[anorm,I] = min(c(:,1)); % Compute the minimum value of a(A*v_i) with respect to i and denote by I the index such that min = a(A*v_I)
+[anorm,I] = min(c(:,1)); % compute the minimum value of a(A*v_i) with respect to i and denote by I the index such that min = a(A*v_I)
 
-z = A*V(:,I); % Candidate new vertex
+z = A*V(:,I); % candidate new vertex
 
 end
