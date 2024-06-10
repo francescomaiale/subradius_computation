@@ -1,4 +1,9 @@
 function [lsr,p,err] = lsr_comp_standard(A, dA, delta, M, V, err, display)
+% This file is part of the subradius_computation project.
+% Copyright (c) 2024 Francesco Paolo Maiale
+% This source code is licensed under the GNU General Public License v3.0. See the LICENSE file for more details.
+
+
 % This function computes a lower and upper bound for the lower spectral radius of a matrix family {A_1, ..., A_m}.
 % It corresponds to Algoritm 4.1 in the main paper.
 
