@@ -44,6 +44,11 @@ if (EXITFLAG<0) % If EXITFLAG is less than 0, then there was an error.
     
 end
 
+if isempty(x)
+    lower=0; upper=0;
+    return
+end
+
 % Computation of a(z) = 1/x(1). For simplicity, when x(1) is +inf, we set a(z)=0
 if isinf(x(1))
     lower=0; upper=0;
