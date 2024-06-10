@@ -91,7 +91,7 @@ for i = 1:m
 
   Y = A(:,(i-1)*d+1:i*d); % Set Y = A_i
   
-  [aN,~]=aNorm(Y,V); % Compute the antinorm of Y with respect to the polytope antinorm which correponds to the vertex set V
+  [aN,~] = matrix_antinorm(Y,V); % Compute the antinorm of Y with respect to the polytope antinorm which correponds to the vertex set V
   
   antinorm(i) = aN*(1+err(2)); 
   lowbound(i) = antinorm(i);
@@ -147,7 +147,7 @@ while n_op < M && L_Radius < H_Radius - delta
 
      antinorm_error_new(NJJN) = (antinorm(k)*(err(1)*antinorm_A(i)+dA(i)) + antinorm(k)*(antinorm_A(i)+dA(i)));
 
-     [aN,~] = aNorm(Y,V); % Compute the antinorm of Y
+     [aN,~] = matrix_antinorm(Y,V); % Compute the antinorm of Y
      antinorm_new(NJJN) = aN*(1+err(2));
 
      lowbound_new(NJJN) = max(lowbound(k),(antinorm_new(NJJN)+antinorm_error_new(NJJN))^(1/n)); % update the lowbound vector
