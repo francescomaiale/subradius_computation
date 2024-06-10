@@ -86,7 +86,7 @@ X = []; % Initialize to store matrices
 H_Radius = inf; % Initial guess for the upper bound
 L_Radius = 0; % Initial guess for the lower bound
 
-antinorm = zeros(m,1); lowbound = zeros(m,1); antinorm_error = zeros(m,1); % Preallocate space
+antinorm = zeros(m,1); lowbound = zeros(m,1); antinorm_err = zeros(m,1); % Preallocate space
 
 for i = 1:m
 
@@ -98,9 +98,9 @@ for i = 1:m
   lowbound(i) = antinorm(i);
   
   if prop
-    antinorm_error(i) = dA(1) * antinorm(i);
+    antinorm_err(i) = dA(1) * antinorm(i);
   else
-    antinorm_error(i) = dA(i);
+    antinorm_err(i) = dA(i);
   end
 
   H_Radius = min(H_Radius,abs(eigs(Y,1,'largestabs'))); % Update the upper bound as the minimum between the previous upper bound and the spectral radius of Y=A_i
@@ -112,9 +112,9 @@ end
 
 %% Initialize the iteration parameter and update the lower bound:
 
-dA = antinorm_error;
+dA = antinorm_err;
 antinorm_A = antinorm;
-L_Radius = max(L_Radius,min(antinorm+antinorm_error));
+L_Radius = max(L_Radius,min(antinorm+antinorm_err));
 
 n_op = m; % Number of antinorm evaluations a(P) made so far corresponds with the number of matrices in the family.
 n = 1; % Current degree of matrices that have been evaluated by the algorithm
@@ -146,7 +146,7 @@ while n_op < M && L_Radius < H_Radius - delta
      
      Y = X((k-1)*d+1:k*d,:)*A(:,(i-1)*d+1:i*d); % Product of length n
 
-     antinorm_error_new(NJJN) = (antinorm(k)*(err(1)*antinorm_A(i)+dA(i)) + antinorm(k)*(antinorm_A(i)+dA(i)));
+     antinorm_error_new(NJJN) = (antinorm(k)*(err(1)*antinorm_A(i)+dA(i)) + antinorm_err(k)*(antinorm_A(i)+dA(i)));
 
      [aN,~] = matrix_antinorm(Y,V); % Compute the antinorm of Y
      antinorm_new(NJJN) = aN*(1+err(2));
