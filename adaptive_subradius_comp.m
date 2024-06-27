@@ -1,6 +1,6 @@
 function [lsr,p,err,vertex_set] = adaptive_subradius_comp(A,dA,delta,M,vertex_set,err,display)
 % This file is part of the subradius_computation project.
-% Copyright (c) 2024 Francesco Paolo Maiale
+% Copyright (c) 2024
 % This source code is licensed under the GNU General Public License v3.0. See the LICENSE file for more details.
 
 
