@@ -1,57 +1,103 @@
-function [lower,upper,x] = real_antinorm(V,z)
+function [lower, upper, x] = real_antinorm(V,z)
 
-% This function (Algorithm SM.1.1 in the supplementary material) computes the polytope antinorm (corresponding to the vertex set V) of a vector z.
+    [n,m] = size(V);
 
+    A_ineq = [ -z,      V;
+                0, -ones(1,m) ];
+    b_ineq = [ zeros(n,1);
+               -1 ];
 
-%% Input
-% V is a dxp real matrix which contains the p vertices defining the polytope antinorm as columns
-% z is a real vector which belongs to the cone on which the antinorm is defined
+    c = zeros(m+1,1);
+    c(1) = 1;
 
-%% Output
-% The values lower and upper provide a lower and upper bound for the value of the antinorm of z
-% The vector x consists of 1/a(z) as its first entry, and the values of the variables in the constraints of the LP problem in all other entries
+    lb = zeros(m+1,1);
+    ub = [];
 
+    Aeq = [];
+    beq = [];
+    tol = 1e-10;  
 
+    options = optimset('Algorithm','dual-simplex-highs','MaxIter',max(300,n), 'Display','off','TolFun',tol);
+    [x, ~, exitflag] = linprog(c, A_ineq, b_ineq, Aeq, beq, lb, ub, options);
 
-[d,p]=size(V); % d = dimension, p = number of vertices
-A=[-z V;0 -ones(1,m)]; % augmented matrix as defined in Algorithm SM.1.1
+    lower = 0;
+    upper = 0;
 
-% The vector c = (1,0,...,0) is used since linprog solves min c^T x, which would be exactly x(1) in this case
-c = zeros(m+1,1); c(1,1) = 1;
+    switch exitflag
 
-% The vector b is used to take care of the inequality constraints in the LP problem
-b = [zeros(length(z),1);-1];
+        case 1
+            % ------------------------------------------------------------------
+            % *Optimal feasible solution found*
+            % ------------------------------------------------------------------
+            if isempty(x)
+                return
+            end
 
-% Aeq and beq are empty because there are no equality constraints in this LP problem
-Aeq=[]; beq=[];
+            xVal = x(1);
 
-% Tolerance to solve with linprog and other options
-tol=1e-10;
-options=optimset('MaxIter',max(300,n),'DISPLAY','off','TolFun',tol);
+            if xVal <= tol
+                lower = Inf;
+                upper = Inf;
+                return
+            end
 
-% x solution of the LP problem using linprog, EXITFLAG is also returned as it gives information in case an error should appear
-[x,~,EXITFLAG,~,~]=linprog(c,A,b,Aeq,beq,zeros(m+1,1),[],options);
+            denomLower = xVal + tol;
+            denomUpper = xVal - tol;
 
-if (EXITFLAG<0) % If EXITFLAG is less than 0, then there is an error
-    
-    if (EXITFLAG==-2) % when EXITFLAG = -2, no feasible point was found. In this case, we set the antinorm of z equal to 0.
-        lower = 0; upper = 0;
-    
-    else % otherwise (i.e., EXITFLAG = -3,...,-9), we print a message which gives the exact EXITFLAG, allowing us to handle the issue properly 
-        disp('Problems with the minimizer. Exit flag: '),disp(EXITFLAG);
-        return
+            if denomUpper <= 0
+                lower = Inf;
+                upper = Inf;
+            else
+                upper = 1 / denomUpper;
+                lower = 1 / denomLower;
+            end
+
+        case 0
+            % ------------------------------------------------------------------
+            % *Reached iteration or time limit*
+            % ------------------------------------------------------------------
+            warning('linprog:NoConvergence',...
+                    'Iteration limit or time limit reached, solution may be inaccurate.');
+            if ~isempty(x) && x(1) > 0
+                denomLower = x(1) + tol;
+                denomUpper = x(1) - tol;
+                if denomUpper <= 0
+                    lower = Inf; 
+                    upper = Inf;
+                else
+                    upper = 1 / denomUpper;
+                    lower = 1 / denomLower;
+                end
+            else
+                lower = 0; 
+                upper = 0;
+            end
+
+        case -2
+            % ------------------------------------------------------------------
+            % *No feasible solution* (infeasible)
+            % ------------------------------------------------------------------
+
+            lower = 0;
+            upper = 0;
+            return
+
+        case -3
+            % ------------------------------------------------------------------
+            % *Problem is unbounded*
+            % ------------------------------------------------------------------
+            lower = 0;  % or 0
+            upper = Inf;
+            return
+
+        otherwise
+            % ------------------------------------------------------------------
+            % *Other negative or unexpected EXITFLAGs*
+            % ------------------------------------------------------------------
+            warning('linprog:Exitflag',...
+                'linprog returned EXITFLAG = %d, solution may be invalid.', exitflag);
+            lower = 0;
+            upper = 0;
+            return
     end
-    
-end
-
-if isempty(x) % if no solution was found, return 0
-    lower=0; upper=0;
-    return
-end
-
-% Computation of a(z) = 1/x(1). For simplicity, when x(1) is +inf, we set a(z)=0
-if isinf(x(1))
-    lower=0; upper=0;
-else
-    upper = 1/(x(1)-tol); lower = 1/(x(1)+tol);
 end
