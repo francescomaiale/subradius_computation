@@ -1,256 +1,247 @@
-function [lsr,p,err,vertex_set] = adaptive_subradius_comp(A,dA,delta,M,vertex_set,err,display)
-% This file is part of the subradius_computation project.
-% Copyright (c) 2024
-% This source code is licensed under the GNU General Public License v3.0. See the LICENSE file for more details.
+function [Radius, m, Err, V, X_opt] = adaptive_subradius_comp(A, dA, delta, M, V, Err, Display, pruneFlag)
 
+if nargin < 2 || isempty(dA),    dA = [];        end
+if nargin < 3 || isempty(delta), delta = 1e-10;   end
+if nargin < 4 || isempty(M),     M = 500;        end
+if nargin < 5 || isempty(V),     V = eye(size(A,1)); end
+if nargin < 6 || isempty(Err),   Err = [];       end
+if nargin < 7 || isempty(Display), Display = 0;  end
+if nargin < 8 || isempty(pruneFlag), pruneFlag = true; end
 
-% This function (Algorithm (A) in the main paper) computes a lower and upper bound for the 
-% lower spectral radius of a matrix family {A_1, ..., A_m} starting from an initial polytope antinorm and 
-% refining it adaptively.
-
-
-%% Input
-% A = [A_1, ..., A_m], given by horizontal concatenation of the matrices
-% dA is an estimate of the norm of the error in the matrices in A
-% delta = is the pre-selected precision within which the LSR should be estimated; specifically, (upper bound - lower bound) should be less than delta
-% M is the maximum number of antinorm evalutions
-% vertex_set is the vertex set corresponding to the initial polytope antinorm
-% err = [err(1), err(2)] gives the relative errors in evaluating products and antinorms
-% display is either 1 or 0; if 1, the algorithm prints the performance vector p and the lower and upper bound after each iteration of the main while loop
-
-%% Output
-% lsr = [lower bound for the LSR, upper bound for the LSR]
-% p is the performance metrics vector, namely p = [degree for which the gap between upper and lower bound is optimal, degree which yields the best upper bound, number of evaluations of antinorms, maximum number of matrices considerd at each stage]
-% vertex_set is the final set of vertices, which corresponds to the refined polytope antinorm at when the algorithm ends
-
-
-%% Check if there are any errors in the input values   
-if nargin < 2
-    dA = [];
+delta = delta(:);
+if numel(delta) < 2
+    delta = [delta(1); delta(1)];
 end
 
-if nargin < 3
-    delta = 1e-6;
-end
+[ma, na] = size(A);
+tol = 1e-10;
+tol_vertices = 1e-10;
 
-if nargin <4
-    M = 500;
-end
-
-% If no initial antinorm is selected, we use the 1-antinorm
-if nargin < 5
-    vertex_set = eye(size(A,1));
-end
-
-if nargin < 6
-    err = [];
-end
-
-if nargin < 7
-    display = 0;
-end
-
-
-%% Check if the matrix A has the correct dimension
-[ma,na] = size(A); % ma = number of rows (or columns) of each A_i, so if the input is correct na/ma should coincide with the number of elements of the family
-
-if (na > ma && rem(na,ma) == 0)
-    m = fix(na/ma); % number of elements of the family
-    d = ma; % each matrix in the family is (d x d)
-elseif (ma > na && rem(ma,na) == 0) % happens when the input A has been given as vertical concatenation of the matrices A_i. Considering A transpose solves the issue:
-    A = A';
-    m = fix(ma/na);
-    d = na;
-else % if neither situation happens, there is an error in the input A
-    disp('The matrix has wrong dimensions');
+if na > ma && rem(na, ma) == 0
+    N = na / ma;
+    n = ma;
+elseif ma > na && rem(ma, na) == 0
+    A = A.';
+    [ma, na] = size(A);
+    N = na / ma;
+    n = ma;
+else
+    disp('The matrix A has incompatible dimensions.');
+    Radius = [0, 0];
+    m = [];
+    X_opt = [];
     return;
 end
 
-%% Adjust the relative errors in evaluating products and antinorms and the error in the norm of A
-if  size(err)*[1;1] < 3
-    err = [2^(-50)*d,2^(-49)*d];
+if numel(Err) < 2
+    Err = [2^(-50)*n, 2^(-49)*n];
 end
 
 dA = dA(:);
-
-if  size(dA)*[1;0] == d
+if numel(dA) == n
     proportional = 0;
-else 
+else
     proportional = 1;
-    if size(dA)*[1;0] == 0
+    if isempty(dA)
         dA = eps;
     end
 end
 
+%% First Step
 
-%% First step: evaluation of products of length one (i.e., the matrices A_i)
-tol = 1e-10; % tolerance used for 1) criterion to include new vertices, 2) pruning of the vertex set.
+X = [];
+HighRadius = Inf;
+LowRadius  = 0;
 
-X = []; % initialize to store matrices
-H_Radius = inf; % initial guess for the upper bound
-L_Radius = 0; % initial guess for the lower bound
+NORM     = zeros(N,1);
+LowBound = zeros(N,1);
+NormErr  = zeros(N,1);
+v_cand = zeros(ma,N);
+cand_counter = 1;
 
-antinorm = zeros(m,1); lowbound = zeros(m,1); antinorm_err = zeros(m,1); % preallocate space
+bestUpperVal = Inf;
+X_opt = [];
 
-for i = 1:m
-    Y = A(:,(i-1)*d+1:i*d); % set Y := A_i
-    [aN,v_new]=matrix_antinorm(Y,vertex_set); % compute the antinorm of Y with respect to the polytope antinorm which correponds to the vertex set; 
-                                              % v_new, on the other hand, is the candidate vertex that solves a(Y)= min_{v in vertex_set} a(Yv)
-  
-    antinorm(i) = aN*(1+err(2)); 
-    lowbound(i) = antinorm(i);
-  
+for i = 1 : N
+    Y = A(:, (i-1)*n + 1 : i*n);
+
+    [aN, v_new] = aNorm(Y, V);
+    NORM(i)     = aN * (1 + Err(2));
+    LowBound(i) = NORM(i);
+
     if proportional
-        antinorm_err(i) = dA(1) * antinorm(i);
+        NormErr(i) = dA(1) * NORM(i);
     else
-        antinorm_err(i) = dA(i);
+        NormErr(i) = dA(i);
     end
-    
-    H_Radius = min(H_Radius,abs(eigs(Y,1,'largestabs'))); % update the upper bound as the minimum between the previous upper bound and the spectral radius of Y=A_i
 
-    % Adaptive refinement of the vertex set/antinorm
-    [~,upper,~] = real_antinorm(vertex_set,v_new); % Compute the antinorm of the candidate new vertex, v_new, with respect to the current vertex set
-    % If the antinorm of v_new is less than or equal to one, it falls inside (or on the boundary) of the polytope; thus, we add it to the vertex set. We use a small tolerance to take into account possible numerical inaccuracies
-    if upper <= 1+tol
-        vertex_set = [vertex_set v_new];
+    rho_Y = abs(eigs(Y, 1, 'largestabs'));
+    HighRadius = min(HighRadius, rho_Y);
+
+    if rho_Y < bestUpperVal
+        bestUpperVal = rho_Y;
+        X_opt = Y;
     end
-    
-    X = [X;Y]; % add Y to the storage X
+
+    X = [X; Y];
+
+    [~, upper, ~] = real_antinorm(V, v_new);
+    if upper <= 1 + tol
+        %V = [V, v_new];
+        if norm(v_new) > 1e-3
+        v_cand(:,cand_counter) = v_new;
+        cand_counter = cand_counter + 1;
+        end
+    end
 end
- 
 
-%% Vertices pruning (Algorithm SM.1.3 in the supplementary material)
+v_cand = v_cand(:,1:cand_counter-1);
+V = [V v_cand];
 
-reduce=0; % parameter used to exit the while loop if no vertex is removed in an entire for loop
+if pruneFlag
+    V = pruneVertices(V, tol_vertices);
+end
 
-while (reduce == 0)
-    n_v = size(vertex_set,2); % current number of vertices
-    
-    if (n_v <= 1) % exit if there is only one vertex left
+dA       = NormErr;
+NormA    = NORM;
+LowRadius= min(NORM + NormErr);
+mm       = N;
+mCount   = 1;
+JJ       = N;
+MaxJJ    = N;
+BestPower= 1;
+ell_opt  = 1;
+
+%% Main loop
+while (mm < M) && (LowRadius < HighRadius - delta(2))
+
+    mCount = mCount + 1;
+    cand_counter = 0;
+    v_cand = [];
+
+    OldHighRadius = HighRadius;
+    OldLowRadius  = LowRadius;
+    LowRadius     = HighRadius;
+    NewJJ         = 0;
+
+    newCap       = JJ*N;
+    NewNorm      = zeros(newCap, 1);
+    NewNormErr   = zeros(newCap, 1);
+    NewLowBound  = zeros(newCap, 1);
+    NewX         = zeros(n*newCap, n);
+    newIndex     = 0;
+
+    for k = 1 : JJ
+        Xk = X((k-1)*n+1 : k*n, :);
+        for i = 1 : N
+            newIndex = newIndex + 1;
+
+            XX = Xk * A(:, (i-1)*n + 1 : i*n);
+
+            NewNormErr(newIndex) = ...
+                ( NORM(k)    * (Err(1)*NormA(i) + dA(i)) + ...
+                NormErr(k) * (NormA(i)        + dA(i)) );
+
+            [aN, v_new] = aNorm(XX, V);
+            NewNorm(newIndex) = aN * (1 + Err(2));
+
+            [~, upper, ~] = real_antinorm(V, v_new);
+            if upper <= 1 + tol
+                %V = [V, v_new];
+                if norm(v_new) > 1e-3
+                cand_counter = cand_counter+1;
+                v_cand = [v_cand v_new];
+                end
+            end
+
+            candidate = (NewNorm(newIndex) + NewNormErr(newIndex))^(1/mCount);
+            NewLowBound(newIndex) = max(LowBound(k), candidate);
+
+            rho_XX = abs(eigs(XX, 1, 'largestabs'));
+            currentUpperVal = rho_XX^(1/mCount);
+            if currentUpperVal < bestUpperVal
+                bestUpperVal = currentUpperVal;
+                X_opt        = XX;
+            end
+            HighRadius = min(HighRadius, currentUpperVal);
+
+            if NewLowBound(newIndex) < OldHighRadius - delta(1)
+                NewJJ = NewJJ + 1;
+                LowRadius = min(LowRadius, NewLowBound(newIndex));
+                NewX((NewJJ-1)*n + 1 : NewJJ*n, :) = XX;
+            end
+
+        end
+    end
+
+    LowRadius = max(OldLowRadius, min(LowRadius, HighRadius - delta(1)));
+
+    mm      = mm + JJ*N;
+    NORM    = NewNorm(1 : NewJJ);
+    LowBound= NewLowBound(1 : NewJJ);
+    NormErr = NewNormErr(1 : NewJJ);
+    JJ      = NewJJ;
+    MaxJJ   = max(JJ, MaxJJ);
+
+    if (HighRadius - LowRadius) < (OldHighRadius - OldLowRadius)
+        BestPower = mCount;
+    end
+
+    if HighRadius < OldHighRadius
+        ell_opt = mCount;
+    end
+
+    if Display
+        disp([BestPower, mCount, mm, JJ, ell_opt]);
+        disp([LowRadius, HighRadius]);
+    end
+
+    V = [V v_cand];
+
+    if pruneFlag
+        V = pruneVertices(V, tol_vertices);
+    end
+
+    if NewJJ == 0
+        disp('int');
+        break;
+    else
+        X = NewX(1 : NewJJ*n, :);
+    end
+
+end
+
+[~, idx] = unique(V', 'rows', 'stable');
+V = V(:, idx);
+
+m      = [BestPower, mCount, mm, MaxJJ, ell_opt];
+Radius = [LowRadius, HighRadius];
+end
+
+function Vp = pruneVertices(V, tol)
+reduce = false;
+while ~reduce
+    n_v = size(V,2);
+    if n_v <= 1
         break;
     end
-    
-    reduce = 1;
-    
-    for i = n_v:-1:1
-        v = vertex_set(:,i); % consider the i-th vertex, i.e. i-th column of the vertex set
-        W = [vertex_set(:,1:i-1) vertex_set(:,i+1:n_v)]; % construct the auxiliary vertex set, obtained from the 
-        if (rank(W)==1)
+    reduce = true;
+    for i = n_v : -1 : 1
+        v = V(:, i);
+        W = [V(:, 1:i-1), V(:, i+1:n_v)];
+
+        if rank(W) == 1
             break
         end
-        [lower,~,~] = real_antinorm(W,v);
-        if (lower >= 1 + tol)
-            reduce=0;
-            vertex_set = W;           
-            break;        
-        end        
-    end
-end
-% Find indices of unique columns and extract them
-[~, idx] = unique(vertex_set', 'rows', 'stable'); vertex_set = vertex_set(:, idx);
 
-
-%% Initialize the iteration parameter and update the lower bound:
-dA = antinorm_err;
-antinorm_A = antinorm;
-L_Radius = max(L_Radius,min(antinorm+antinorm_err));
-
-n_op = m; % number of antinorm evaluations a(P) made so far corresponds with the number of matrices in the family.
-n = 1; % current degree of matrices that have been evaluated by the algorithm
-J = m; % number of elements evaluated among products of degree n. Since n = 1, it corresponds to the number of matrices in the family.
-MaxJ = J; % keeps track of the maximum value achieved by J
-
-BestPower = 1; % keeps track of the degree yielding the optimal gap between lower and upper bound
-ell_slp = 1; % keeps track of the degree yielding the optimal upper bound
-
-%% Main loop of the algorithm
-while n_op < M && L_Radius < H_Radius - delta
-    n = n + 1; % increase n as we start to explore products of degree n + 1
-    H_Radius_Old = H_Radius; L_Radius_Old = L_Radius; % store the previous upper and lower bound to later establish if 1) the gap has improved and 2) the upper bound has improved
-    L_Radius = H_Radius; 
-    NewJ = 0; % this variable counts how many products of degree n + 1 are evaluated by the algorithm
-
-    % The first "for" cycle considers products of length n-1, evaluated already in the previous step. 
-    % The second "for" cycle considers the elements of the family, which multiplied with products of length n-1 generate products of length n
-
-    for k = 1:J
-        for i = 1:m
-            NJJN = NewJ + 1;
-            Y = X((k-1)*d+1:k*d,:)*A(:,(i-1)*d+1:i*d); % current product of length n
-            
-            antinorm_error_new(NJJN) = (antinorm(k) * (err(1) * antinorm_A(i) + dA(i)) + antinorm_err(k) * (antinorm_A(i) + dA(i)));
-            [aN,v_new] = matrix_antinorm(Y, vertex_set); % compute the antinorm of Y
-            antinorm_new(NJJN) = aN*(1+err(2));
-            lowbound_new(NJJN) = max(lowbound(k),(antinorm_new(NJJN)+antinorm_error_new(NJJN))^(1/n)); % update the lowbound vector
-            % Add the candidate vertex if it satisfies the criterion (as in the first step)
-            [~,upper,~] = real_antinorm(vertex_set,v_new);
-            if upper <= 1+tol
-                vertex_set = [vertex_set v_new];
-            end
-
-            H_Radius = min(H_Radius, (abs(eigs(Y,1,'largestabs')))^(1/n)); % update the upper bound as the min between the current value and the spectral radius
-            if lowbound_new(NJJN) < H_Radius - delta % establish if the matrix Y make the cut and will be used in the next step to generate products of degree n+1
-                NewJ = NewJ + 1; 
-                L_Radius = min(L_Radius,lowbound_new(NJJN)); % update the lower bound
-                NewX((NewJ-1)*d+1:NewJ*d,:) = Y; % store this matrix as it will be used in the next iteration of the while loop
-            end
-        end
-    end
-
-    % If no matrix product satisfies the "if" above, then convergence to delta has been achieved; thus, terminate the algorithm
-    if isempty(NewX)
-        return
-    else
-    X = NewX; % replace the matrices stored previosly (in X) with the new ones to prepare for the next iteration.
-    end
-
-    L_Radius = max(L_Radius_Old,min(L_Radius,H_Radius-delta)); % final update of the lower bound
-    n_op = n_op + J * m; % each product yields one antinorm evaluation, so the current number increases by the product of the lengths of the two for cycles.
-    
-    % Replace old antinorms, lowbounds and errors with the new ones
-    antinorm = antinorm_new; lowbound = lowbound_new; antinorm_err = antinorm_error_new;
-    
-    % Prepare J for the next iteration and update MaxJ
-    J = NewJ; MaxJ = max(J,MaxJ);
-
-    if H_Radius - L_Radius < H_Radius_Old - L_Radius_Old
-        BestPower = n; % update the optimal gap degree if the gap decreased
-    end
-
-    if H_Radius < H_Radius_Old
-        ell_slp=n; % update the optimal upper bound degree if the upper bound decreased
-    end
-  
-    if display
-        disp([BestPower,ell_slp,n,n_op,J]);
-        disp([L_Radius,H_Radius]);
-    end
-
-%% Pruning of vertices before the next iteration of the main loop
-    reduce=0; % Initialize the pruning
-    while (reduce==0)
-        n_v =size(vertex_set,2);
-        if (size(vertex_set,2)<=1)
+        [lowerVal, ~, ~] = real_antinorm(W, v);
+        if lowerVal >= 1 + tol
+            reduce = false;
+            V = W;
             break;
         end
-        reduce=1;
-        for l=n_v:-1:1
-            v=vertex_set(:,l);
-            W=[vertex_set(:,1:l-1) vertex_set(:,l+1:n_v)];
-            if (rank(W)==1)
-                break
-            end
-            [lower,~,~] = real_antinorm(W,v); % In this instance, the lower bound only is needed
-            if (lower>=1+tol)
-                %disp('eliminate vertex');
-                reduce=0;
-                vertex_set=W;             
-                break;        
-            end        
-        end
     end
-[~, idx] = unique(vertex_set', 'rows', 'stable'); vertex_set = vertex_set(:, idx);
 end
-
-p = [BestPower,ell_slp,n,n_op,MaxJ];
-lsr = [L_Radius,H_Radius];
+[~, idx] = unique(V', 'rows', 'stable');
+Vp = V(:, idx);
+end
