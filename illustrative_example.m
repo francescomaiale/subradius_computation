@@ -1,5 +1,5 @@
 % In this file, we consider the example of Section 5.1 (Illustrative Example) and apply all algorithms: 
-% Algorithm S (lsr_comp_standard.m), Algorithm A (adaptive_subradius_comp.m), and Algorithm E (adaptive_eigenvectors_subradius_comp.m)
+% Algorithm S (lsr_comp.m), Algorithm A (adaptive_subradius_comp.m), and Algorithm E (adaptive_eigenvectors_subradius_comp.m)
 
 close all
 clearvars
@@ -24,9 +24,8 @@ V_in = eye(2); % 1-antinorm is the initial polytope antinorm in all cases
 M=[500 5000 10000]; % different values of maximum number of allowed antinorm evaluations
 
 for i = 1:length(M)
-    [lsr_standard(i,:),p_standard(i,:),~] = lsr_comp_standard(A, numeric_error, delta, M(i), V_in, [], display);
+    [lsr_standard(i,:),p_standard(i,:),~] = lsr_comp(A, numeric_error, delta, M(i), V_in, [], display);
 end
-
 
 %% Algorithm A
 M = [100 500 1000];
@@ -34,7 +33,7 @@ n_vert_A = zeros(length(M),1); % store the number of vertices of the adaptive an
 V_adaptive_A = []; % store the vertices of the adaptive antinorms
 
 for i = 1:length(M)
-    [lsr_adaptive_A(i,:),p_adaptive_A(i,:),~,V_new] = adaptive_subradius_comp(A, numeric_error, delta, M(i), V_in, [], display);
+    [lsr_adaptive_A(i,:),p_adaptive_A(i,:),~,V_new] = adaptive_subradius_comp(A, numeric_error, delta, M(i), V_in, [], display, true);
     V_adaptive_A = [V_new zeros(2,1)]; % the column (0, 0)^T is added to separate the different vertices set obtained for different values of M.
     n_vert_A(i) = size(V_new,2);
 end
@@ -44,10 +43,10 @@ end
 M = [100 500 1000];
 n_vert_E = zeros(length(M),1); % store the number of vertices of the adaptive antinorms
 V_adaptive_E = []; % store the adaptive antinorms
-theta = 1.005; % scaling parameter (to rescale eigenvectors prior to adding them)
+theta = 1.1; % scaling parameter (to rescale eigenvectors prior to adding them)
 
 for i = 1:length(M)
-    [lsr_adaptive_E(i,:),p_adaptive_E(i,:),~,V_new] = adaptive_eigenvectors_subradius_comp(A, numeric_error, delta, M(i), V_in, [], display,theta);
+    [lsr_adaptive_E(i,:),p_adaptive_E(i,:),~,V_new] = adaptive_eigenvectors_subradius_comp(A, numeric_error, delta, M(i), V_in, [], display,theta,true);
     V_adaptive_E = [V_new zeros(2,1)];
     n_vert_E(i) = size(V_new,2);
 end
