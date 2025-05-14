@@ -1,9 +1,6 @@
 % In this file, we consider the example of Section 5.1 (Illustrative Example) and apply all algorithms: 
 % Algorithm S (lsr_comp.m), Algorithm A (adaptive_subradius_comp.m), and Algorithm E (adaptive_eigenvectors_subradius_comp.m)
 
-close all
-clearvars
-
 A_1 = [7 2; 0 3]; A_2 = [2 0; 4 8];
 A = [A_1 A_2];
 
