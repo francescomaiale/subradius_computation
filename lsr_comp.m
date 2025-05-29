@@ -8,7 +8,7 @@ function [lsr, m, errOut] = lsr_comp(A, dA, delta, M, V, errIn, Display)
 %   A       : matrix of size (n × n*N) or (n*N × n), representing N blocks A_i ∈ ℝ^(n×n)
 %   dA      : scalar or [N×1] vector of additive error bounds per block (default: zeros(N,1))
 %   delta   : [tol_low; tol_high] tolerances for convergence (default: [1e-6; 1e-6])
-%   M       : max total antinorm evaluations (default: 250)
+%   M       : max total antinorm evaluations (default: 500)
 %   V       : vertices defining polytope antinorm (default: eye(n), the 1-antinorm)
 %   errIn   : [err_low; err_high] relative error bounds for aNorm (default: [2^-50*n; 2^-49*n])
 %   Display : logical flag to print iteration summary (default: false)
@@ -24,19 +24,22 @@ function [lsr, m, errOut] = lsr_comp(A, dA, delta, M, V, errIn, Display)
 %   errOut  : [err_low, err_high] actual error bounds used
 %==========================================================================
 
-    if nargin < 2 || isempty(dA),   dA = [];           end
-    if nargin < 3 || isempty(delta), delta = 1e-2;     end
-    if nargin < 4 || isempty(M),     M = 250;          end
-    if nargin < 5 || isempty(V),     V = eye(size(A,1));  end
-    if nargin < 6 || isempty(err),   err = [];         end
-    if nargin < 7 || isempty(Display), Display = 0;    end
+% 1. Input parsing & defaults
+narginchk(1,7);
+[ma, na] = size(A);
 
-    delta = delta(:);
-    if isscalar(delta)
-       delta(2) = delta(1);
-    end
+if nargin < 2 || isempty(dA),      dA = [];      end
+if nargin < 3 || isempty(delta),    delta = [1e-6;1e-6]; end
+if nargin < 4 || isempty(M),        M = 500;      end
+if nargin < 5 || isempty(V),        V = eye(ma);  end
+if nargin < 6 || isempty(errIn),    errIn = [];   end
+if nargin < 7 || isempty(Display),  Display = false; end
 
-    [ma, na] = size(A);
+delta = delta(:);
+if numel(delta)==1, delta(2)=delta(1); end
+assert(isnumeric(delta) && numel(delta)==2, 'delta must be scalar or 2-element vector.');
+
+
     % Attempt to interpret if A is (n x n*N) or (n*N x n)
     if na > ma && rem(na, ma) == 0
         N = na / ma;  % number of sub-blocks
