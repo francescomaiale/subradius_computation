@@ -1,18 +1,28 @@
-function [lsr, m, err] = lsr_comp(A, dA, delta, M, V, err, Display)
+function [lsr, m, errOut] = lsr_comp(A, dA, delta, M, V, errIn, Display)
+%==========================================================================
+% Description:
+%   Estimate the lower spectral radius (LSR) of a matrix family
+%   F = {A_1, …, A_N} by the fixed antinorm algorithm (Algorithm S).
 %
-%    Inputs (with default values):
-%       A       : (n x n*N) or (n*N x n) matrix family elements (mandatory).
-%       dA      : estimate of the norm of the error in A's matrices (default []).
-%       delta   : two-element vector controlling tolerance [delta_low, delta_high] (default 1e-2).
-%       M       : max number of expansions (default 250).
-%       V       : matrix for aNorm computations (default identity).
-%       err     : relative error array for aNorm computations (default [2^(-50)*n, 2^(-49)*n]).
-%       rho     : initial guess for the largest stable radius? (default 0).
-%       Display : whether to display iteration info (default 0).
+% Inputs (positional or name-value):
+%   A       : matrix of size (n × n*N) or (n*N × n), representing N blocks A_i ∈ ℝ^(n×n)
+%   dA      : scalar or [N×1] vector of additive error bounds per block (default: zeros(N,1))
+%   delta   : [tol_low; tol_high] tolerances for convergence (default: [1e-6; 1e-6])
+%   M       : max total antinorm evaluations (default: 250)
+%   V       : vertices defining polytope antinorm (default: eye(n), the 1-antinorm)
+%   errIn   : [err_low; err_high] relative error bounds for aNorm (default: [2^-50*n; 2^-49*n])
+%   Display : logical flag to print iteration summary (default: false)
 %
-%    Outputs:
-%       lsr : [LowRadius, HighRadius] final bounds.
-%       m   : [BestPower, m_current, mm, MaxJJ, ell_slp] iteration info.
+% Outputs:
+%   lsr     : [LowRadius, HighRadius] bounds on the true LSR
+%   m       : [BestPower; FinalDegree; TotalEvals; MaxQueue; SLPPower]
+%             • BestPower    – degree k minimizing (High_k − Low_k)
+%             • FinalDegree  – last degree k explored by the algorithm
+%             • TotalEvals   – total antinorm evaluations performed
+%             • MaxQueue     – maximum number of products retained at any k
+%             • SLPPower     – degree at which High_k strictly decreases
+%   errOut  : [err_low, err_high] actual error bounds used
+%==========================================================================
 
     if nargin < 2 || isempty(dA),   dA = [];           end
     if nargin < 3 || isempty(delta), delta = 1e-2;     end
@@ -43,9 +53,10 @@ function [lsr, m, err] = lsr_comp(A, dA, delta, M, V, err, Display)
         return;
     end
 
-    if numel(err) < 2
-        err = [2^(-50)*n, 2^(-49)*n]; 
+    if isempty(err)
+        err = [2^(-50)*n, 2^(-49)*n];
     end
+    assert( numel(err) == 2, '''err'' must be a 2-element vector.' );
 
     dA = dA(:);
     if numel(dA) == n
