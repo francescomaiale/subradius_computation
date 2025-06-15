@@ -22,6 +22,11 @@ function [lsr, m, errOut] = lsr_comp(A, dA, delta, M, V, errIn, Display)
 %             • MaxQueue     – maximum number of products retained at any k
 %             • SLPPower     – degree at which High_k strictly decreases
 %   errOut  : [err_low, err_high] actual error bounds used
+%
+% NOTE:
+% the antinorm is computed using aNorm, which by default uses the file
+% real_antinorm.m, however it can be changed to the solver that relies
+% on CVX by simply following the instructions in aNorm.m 
 %==========================================================================
 
 % 1. Input parsing & defaults
