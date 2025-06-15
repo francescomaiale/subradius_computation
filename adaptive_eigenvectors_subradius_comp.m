@@ -1,116 +1,146 @@
-function [Radius,m,Err,V,X_opt] = adaptive_eigenvectors_subradius_comp( ...
-    A, dA, delta, M, V, Err, Display, theta, pruneFlag)
+function [Radius, m, errOut, V, X_opt] = adaptive_eigenvectors_subradius_comp(...
+    A, dA, delta, M, V, errIn, Display, theta, pruneFlag)
+%==========================================================================
+% Description:
+%   Estimate the spectral subradius (lower spectral radius) of a matrix
+%   family F = {A_1, …, A_N} using an adaptive eigenvector‐based
+%   subradius computation with polytope antinorms and eigenvector expansion.
+%
+% Inputs (positional or name-value):
+%   A         : matrix of size (n × n*N) or (n*N × n), representing
+%               N blocks A_i ∈ ℝ^(n×n)
+%   dA        : scalar or [N×1] vector of additive error bounds per
+%               block (default: eps)
+%   delta     : [tol_low; tol_high] tolerances for convergence
+%               (default: [1e-6; 1e-6])
+%   M         : maximum total products to explore (default: 500)
+%   V         : initial vertices defining polytope antinorm
+%               (default: eye(n))
+%   errIn     : [err_low; err_high] relative error bounds for aNorm
+%               (default: [2^-50*n; 2^-49*n])
+%   Display   : logical flag to print iteration summaries
+%               (default: false)
+%   theta     : expansion factor for eigenvector‐based vertices
+%               (default: 1.01)
+%   pruneFlag : logical flag to prune redundant vertices
+%               (default: true)
+%
+% Outputs:
+%   Radius    : [LowRadius, HighRadius] bounds on the true subradius
+%   m         : [BestPower, IterCount, TotalEvals, MaxQueue, SLPPower]
+%   errOut    : [err_low, err_high] actual error bounds used
+%   V         : final set of vertices
+%   X_opt     : product achieving the current best upper bound
+%
+% NOTE:
+%   Relies on aNorm and real_antinorm. It can be changed to the CVX
+%   solver (real_antinorm_cvx) by following the instructions in aNorm.m 
+%   Pruning uses pruneVertices below.
+%==========================================================================
 
-if nargin < 2 || isempty(dA),       dA = [];          end
-if nargin < 3 || isempty(delta),    delta = 1e-6;     end
-if nargin < 4 || isempty(M),        M = 500;          end
-if nargin < 5 || isempty(V),        V = eye(size(A,1)); end
-if nargin < 6 || isempty(Err),      Err = [];         end
-if nargin < 7 || isempty(Display),  Display = 0;      end
-if nargin < 8 || theta < 1,         theta = 1.01;     end
-if nargin < 9 || isempty(pruneFlag), pruneFlag = true; end
+%% 1. Input parsing & defaults
+narginchk(1,9);
+[ma, na] = size(A);
+
+if nargin < 2 || isempty(dA),        dA = [];             end
+if nargin < 3 || isempty(delta),     delta = [1e-6;1e-6]; end
+if nargin < 4 || isempty(M),         M     = 500;         end
+if nargin < 5 || isempty(V),         V     = eye(ma);     end
+if nargin < 6 || isempty(errIn),     errIn = [];          end
+if nargin < 7 || isempty(Display),   Display = false;     end
+if nargin < 8 || isempty(theta) || theta<1, theta = 1.01;  end
+if nargin < 9 || isempty(pruneFlag), pruneFlag = true;    end
 
 delta = delta(:);
-if numel(delta) < 2
-    delta = [delta(1); delta(1)];
-end
+if numel(delta)==1, delta(2)=delta(1); end
+assert(isnumeric(delta) && numel(delta)==2, ...
+    'delta must be a scalar or 2-element vector.');
 
-[ma, na] = size(A);
-tol_vertices = 1e-8;  % Tolerance for vertex pruning
-tol = 1e-8;
+tol          = 1e-8;
+tol_vertices = 1e-8;
 
-if (na > ma && rem(na,ma) == 0)
-    N = na / ma;
-    n = ma;
-elseif (ma > na && rem(ma,na) == 0)
-    A = A.';
-    [ma, na] = size(A);
-    N = na / ma;
-    n = ma;
+%% 2. Block-structure check
+if na>ma && rem(na,ma)==0
+    N = na/ma;  n = ma;
+elseif ma>na && rem(ma,na)==0
+    A = A.';  [ma, na] = size(A);
+    N = na/ma;  n = ma;
 else
-    disp('The matrix A has incompatible dimensions.');
-    Radius = [0,0];
-    m      = [];
-    X_opt  = [];
+    disp('The matrix A has incompatible dimensions. Aborting...');
+    Radius = [0,0];  m = [];  errOut = [];  V = [];  X_opt = [];
     return;
 end
 
-if numel(Err) < 2
-    Err = [2^(-50)*n, 2^(-49)*n];
+%% 3. Error-bounds defaults & validation
+if isempty(errIn)
+    errIn = [2^(-50)*n; 2^(-49)*n];
 end
+assert(isnumeric(errIn) && numel(errIn)==2, ...
+    'errIn must be a 2-element vector.');
 
+%% 4. Prepare per-block additive errors
 dA = dA(:);
-if numel(dA) == n
-    proportional = 0;
+if numel(dA)==n
+    proportional = false;
 else
-    proportional = 1;
-    if isempty(dA)
-        dA = eps;
-    end
+    proportional = true;
+    if isempty(dA), dA = eps; end
 end
 
-%% First Step
-X = [];
-HighRadius = Inf;
-
+%% 5. Initialization
+X            = [];
+HighRadius   = Inf;
 bestUpperVal = Inf;
 X_opt        = [];
 
-NORM     = zeros(N,1);
-LowBound = zeros(N,1);
-NormErr  = zeros(N,1);
+NORM         = zeros(N,1);
+LowBound     = zeros(N,1);
+NormErr      = zeros(N,1);
 
-for i = 1 : N
-    Y = A(:, (i-1)*n + 1 : i*n);
+%% 6. First-level products
+for i = 1:N
+    Y = A(:, (i-1)*n+1 : i*n);
 
-    [aN, v_new] = aNorm(Y, V);
-    NORM(i)     = aN * (1 + Err(2));
-    LowBound(i) = NORM(i);
+    [aN, v_new]   = aNorm(Y, V);
+    NORM(i)       = aN*(1 + errIn(2));
+    LowBound(i)   = NORM(i);
 
     if proportional
-        NormErr(i) = dA(1) * NORM(i);
+        NormErr(i) = dA(1)*NORM(i);
     else
         NormErr(i) = dA(i);
     end
 
+    % include new vertex if antinorm upper ≤ 1
     try
         [~, upperVal, ~] = real_antinorm(V, v_new);
-        if upperVal <= 1 + tol
-            if norm(v_new) > tol
-                V = [V, v_new];
-            end
+        if upperVal <= 1 + tol && norm(v_new)>tol
+            V = [V, v_new];
         end
     catch ME
-        fprintf('Error on block %d: %s\n', i, ME.message);
-        continue;
+        fprintf('Warning: real_antinorm failed on block %d: %s\n', i, ME.message);
     end
 
-    rho_Y = abs(eigs(Y, 1, 'largestabs'));
-
-    if HighRadius < tol
-        HighRadius = rho_Y;
-    else
-        HighRadius = min(HighRadius, rho_Y);
-    end
+    % spectral radius and eigenvector expansion
+    rho_Y = abs(eigs(Y,1,'largestabs'));
+    HighRadius = min(HighRadius, rho_Y);
 
     if abs(HighRadius - rho_Y) < tol
-        [vY, ~] = eigs(Y, 1, 'largestabs');
+        [vY, ~] = eigs(Y,1,'largestabs');
         vY = abs(vY);
-        if norm(vY) > tol
-            [lower_ev,~,~] = real_antinorm(V, vY);
-            V = [V, vY/(lower_ev * theta)];
-        end
+        [lower_ev,~,~] = real_antinorm(V, vY);
+        V = [V, vY/(lower_ev*theta)];
     end
 
-    currentUpperVal = rho_Y;
-    if currentUpperVal < bestUpperVal
-        bestUpperVal = currentUpperVal;
+    if rho_Y < bestUpperVal
+        bestUpperVal = rho_Y;
         X_opt        = Y;
     end
 
     X = [X; Y];
 end
 
+%% prepare loop variables
 dA        = NormErr;
 NormA     = NORM;
 LowRadius = min(NORM + NormErr);
@@ -125,88 +155,81 @@ if pruneFlag
     V = pruneVertices(V, tol_vertices);
 end
 
-%% Main loop
-while (mm < M) && (LowRadius < HighRadius - delta(2))
+%% 7. Main adaptive loop
+while mm < M && LowRadius < HighRadius - delta(2)
+    mCount      = mCount + 1;
+    OldHigh     = HighRadius;
+    OldLow      = LowRadius;
+    LowRadius   = HighRadius;
+    NewJJ       = 0;
 
-    mCount = mCount + 1;
-    OldHighRadius = HighRadius;
-    OldLowRadius  = LowRadius;
+    cap         = JJ * N;
+    NewNorm     = zeros(cap,1);
+    NewNormErr  = zeros(cap,1);
+    NewLowBound = zeros(cap,1);
+    NewX        = zeros(n*cap, n);
+    idx         = 0;
 
-    LowRadius = HighRadius;
-    NewJJ     = 0;
+    for k = 1:JJ
+        Xk = X((k-1)*n+1:k*n, :);
+        for i = 1:N
+            idx = idx + 1;
+            XX  = Xk * A(:, (i-1)*n+1:i*n);
 
-    newCap      = JJ*N;
-    NewNorm     = zeros(newCap,1);
-    NewNormErr  = zeros(newCap,1);
-    NewLowBound = zeros(newCap,1);
-    NewX        = zeros(n*newCap, n);
-    newIndex    = 0;
+            % propagate error
+            NewNormErr(idx) = ...
+                NORM(k)*(errIn(1)*NormA(i) + dA(i)) + ...
+                NormErr(k)*(NormA(i)        + dA(i));
 
-    for k = 1 : JJ
-        Xk = X((k-1)*n+1 : k*n, :);
-        for i = 1 : N
-            newIndex = newIndex + 1;
+            [aN, v_new]      = aNorm(XX, V);
+            NewNorm(idx)     = aN*(1 + errIn(2));
 
-            XX = Xk * A(:, (i-1)*n + 1 : i*n);
-
-            NewNormErr(newIndex) = ...
-                ( NORM(k)    * (Err(1)*NormA(i) + dA(i)) + ...
-                NormErr(k) * (NormA(i)        + dA(i)) );
-
-            [aN, v_new] = aNorm(XX, V);
-            NewNorm(newIndex) = aN * (1 + Err(2));
-
+            % antinorm upper test
             [~, upperVal, ~] = real_antinorm(V, v_new);
-            if upperVal <= 1 + tol
-                if norm(v_new) > tol
-                    V = [V, v_new];
-                end
+            if upperVal <= 1 + tol && norm(v_new)>tol
+                V = [V, v_new];
             end
 
-            cand = (NewNorm(newIndex) + NewNormErr(newIndex))^(1/mCount);
-            NewLowBound(newIndex) = max(LowBound(k), cand);
+            candVal = (NewNorm(idx) + NewNormErr(idx))^(1/mCount);
+            NewLowBound(idx) = max(LowBound(k), candVal);
 
-            rho_XX = abs(eigs(XX, 1, 'largestabs'));
-            currHR = rho_XX^(1/mCount);
-            HighRadius = min(HighRadius, currHR);
+            rho_XX   = abs(eigs(XX,1,'largestabs'))^(1/mCount);
+            HighRadius = min(HighRadius, rho_XX);
 
-            if abs(HighRadius - currHR) < tol
-                [v, ~] = eigs(XX, 1, 'largestabs');
+            % spectral‐expansion test
+            if abs(HighRadius - rho_XX) < tol
+                [v,~] = eigs(XX,1,'largestabs');
                 v = abs(v);
                 [lowEv,~,~] = real_antinorm(V, v);
-                V = [V, v/(lowEv * theta)];
+                V = [V, v/(lowEv*theta)];
             end
 
-            if currHR < bestUpperVal
-                bestUpperVal = currHR;
+            if rho_XX < bestUpperVal
+                bestUpperVal = rho_XX;
                 X_opt        = XX;
             end
 
-            if NewLowBound(newIndex) < HighRadius - delta(1)
+            if NewLowBound(idx) < OldHigh - delta(1)
                 NewJJ = NewJJ + 1;
-                LowRadius = min(LowRadius, NewLowBound(newIndex));
-                NewX((NewJJ-1)*n+1 : NewJJ*n, :) = XX;
+                LowRadius = min(LowRadius, NewLowBound(idx));
+                NewX((NewJJ-1)*n+1:NewJJ*n, :) = XX;
             end
         end
     end
 
-    X        = NewX(1 : NewJJ*n, :);
-    NORM     = NewNorm(1 : NewJJ);
-    LowBound = NewLowBound(1 : NewJJ);
-    NormErr  = NewNormErr(1 : NewJJ);
-    JJ       = NewJJ;
-    MaxJJ    = max(JJ, MaxJJ);
-
-    LowRadius = max(OldLowRadius, min(LowRadius, HighRadius - delta(1)));
+    % update queues & counters
     mm        = mm + JJ*N;
+    NORM      = NewNorm(1:NewJJ);
+    LowBound  = NewLowBound(1:NewJJ);
+    NormErr   = NewNormErr(1:NewJJ);
+    JJ        = NewJJ;
+    MaxJJ     = max(MaxJJ, JJ);
 
-    if NewJJ > 0
-        if (HighRadius - LowRadius) < (OldHighRadius - OldLowRadius)
-            BestPower = mCount;
-        end
+    % update best power and SLP power
+    if (HighRadius - LowRadius) < (OldHigh - OldLow)
+        BestPower = mCount;
     end
-
-    if HighRadius < OldHighRadius
+    if HighRadius < OldHigh
         ell_opt = mCount;
     end
 
@@ -219,49 +242,41 @@ while (mm < M) && (LowRadius < HighRadius - delta(2))
         V = pruneVertices(V, tol_vertices);
     end
 
-    if NewJJ == 0
+    if JJ == 0
+        disp('Terminating early: no new products to explore.');
         break;
     else
-        X = NewX(1 : NewJJ*n, :);
+        X = NewX(1:JJ*n, :);
     end
 end
 
-[~, idx] = unique(V', 'rows', 'stable');
-V = V(:, idx);
+%% 8. Final outputs
+[~, idxv] = unique(V','rows','stable');
+V         = V(:,idxv);
+Radius    = [LowRadius, HighRadius];
+m         = [BestPower, mCount, mm, MaxJJ, ell_opt];
+errOut    = errIn;
 
-m      = [BestPower, mCount, mm, MaxJJ, ell_opt];
-Radius = [LowRadius, HighRadius];
 end
 
-
-function Vp = pruneVertices(V, tol_vertices)
-
-if norm(V) < 1e-3
-    Vp = V;
-else
-
-    reduce = false;
-    while ~reduce
-        n_v = size(V,2);
-        if n_v <= 1
-            break;
-        end
-        reduce = true;
-        for i = n_v : -1 : 1
-            v = V(:, i);
-            W = [V(:,1:i-1), V(:,i+1:n_v)];
-            if rank(W) == 1
-                break;
-            end
-            [lowerVal, ~, ~] = real_antinorm(W, v);
-            if lowerVal >= 1 + tol_vertices
-                reduce = false;
+%% Helper: pruneVertices
+function Vp = pruneVertices(V, tol)
+% Remove vertices v for which lower antinorm ≥ 1+tol when omitted
+    changed = true;
+    while changed && size(V,2)>1
+        changed = false;
+        for i = size(V,2):-1:1
+            v = V(:,i);
+            W = [V(:,1:i-1), V(:,i+1:end)];
+            if rank(W)==1, continue; end
+            [lowerVal,~,~] = real_antinorm(W, v);
+            if lowerVal >= 1+tol
                 V = W;
+                changed = true;
                 break;
             end
         end
     end
-    [~, idx] = unique(V', 'rows', 'stable');
-    Vp = V(:, idx);
-end
+    [~, idx] = unique(V','rows','stable');
+    Vp       = V(:,idx);
 end
