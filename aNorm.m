@@ -1,31 +1,55 @@
 function [a, v] = aNorm(Y, V)
-    % aNorm  Compute the "antinorm" of a matrix V under transformation Y.
-    %
-    % Inputs:
-    %   Y : an (n x n) or (n x k) matrix
-    %   V : an (n x j) matrix whose columns are vectors for which the antinorm is computed
-    %
-    % Outputs:
-    %   a : the minimum "upper" value of real_antinorm(V, Y*V(:,i)) over all columns i
-    %   v : the vector Y * V(:,I) that achieves this minimum
 
-    j = size(V, 2);      % number of columns (vectors) in V
-    c = zeros(j, 1);     % preallocate array for the "upper" values
+% aNorm.m Compute the polytope antinorm (defined by the vertex set V) of a matrix Y
+%
+%   [a, v] = ANORM(Y, V) computes, for each column V(:,i), the polytope antinorm
+%   of the vector z = Y*V(:,i), then returns the smallest such bound across all i
+%   and the corresponding transformed vector.
+%
+%   NOTE: This function calls real_antinorm.m, which must be on the MATLAB path.
+%   If you prefer to use a CVX-based solver, replace real_antinorm with
+%   real_antinorm_cvx (requires CVX toolbox: https://cvxr.com/cvx/), as 
+%   explained in the corresponding MATLAB file real_antinorm_cvx.m
+%
+%   Inputs:
+%     Y - The matrix to compute the antinorm of. Must satisfy size(Y,2)==size(V,1).
+%     V - The matrix which columns define the polytope antinorm.
+%
+%   Outputs:
+%     a - scalar equal to min_i lower_i, where lower_i is the lower bound
+%         on the antinorm computed by real_antinorm(V, Y*V(:,i)).
+%     v - the transformed vector z = Y*V(:,I) corresponding to the minimal bound.
 
-    for i = 1 : j
+    % Validate inputs
+    if nargin < 2
+        error('aNorm requires two inputs: Y (p x n) and V (n x j).');
+    end
+    [n, j] = size(V);
+    [p, nY] = size(Y);
+    if nY ~= n
+        error('Inner dimensions must agree: size(Y,2) == size(V,1).');
+    end
+
+    tol = 1e-10;           % numerical tolerance for lower bound
+    c = zeros(j, 1);       % preallocate for antinorm lower bounds
+
+    % Loop over each column of V
+    for i = 1:j
+        z = Y * V(:, i);    % generate vector for real_antinorm
         try
-            [lower, ~, ~] = real_antinorm(V, Y * V(:, i));
-            c(i) = lower;
+            % Compute lower bound on real antinorm
+            [lower_i, ~, ~] = real_antinorm(V, z);
+            % If desired, swap to CVX solver:
+            % [lower_i, ~, ~] = real_antinorm_cvx(V, z);
+            c(i) = lower_i;
         catch ME
-            % If real_antinorm fails for any reason, you can choose to skip or handle differently
-            fprintf('Error on iteration %d: %s\n', i, ME.message);
-            c(i) = Inf; 
-            continue;
+            warning('aNorm:SolverError', ...
+                'Iteration %d: real_antinorm failed: %s. Setting bound = Inf.', i, ME.message);
+            c(i) = Inf;
         end
     end
 
-    [a, I] = min(c);
-
-    v = Y * V(:, I);
-
+    % Find minimal bound and corresponding vector
+    [a, idx] = min(c);
+    v = Y * V(:, idx);
 end
