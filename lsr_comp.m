@@ -1,4 +1,4 @@
-function [lsr, m, errOut] = lsr_comp(A, dA, delta, M, V, errIn, Display)
+function [lsr, m, err] = lsr_comp(A, dA, delta, M, V, err, Display)
 %==========================================================================
 % Description:
 %   Estimate the lower spectral radius (LSR) of a matrix family
@@ -10,7 +10,7 @@ function [lsr, m, errOut] = lsr_comp(A, dA, delta, M, V, errIn, Display)
 %   delta   : [tol_low; tol_high] tolerances for convergence (default: [1e-6; 1e-6])
 %   M       : max total antinorm evaluations (default: 500)
 %   V       : vertices defining polytope antinorm (default: eye(n), the 1-antinorm)
-%   errIn   : [err_low; err_high] relative error bounds for aNorm (default: [2^-50*n; 2^-49*n])
+%   err   : [err_low; err_high] relative error bounds for aNorm (default: [2^-50*n; 2^-49*n])
 %   Display : logical flag to print iteration summary (default: false)
 %
 % Outputs:
@@ -21,7 +21,7 @@ function [lsr, m, errOut] = lsr_comp(A, dA, delta, M, V, errIn, Display)
 %             • TotalEvals   – total antinorm evaluations performed
 %             • MaxQueue     – maximum number of products retained at any k
 %             • SLPPower     – degree at which High_k strictly decreases
-%   errOut  : [err_low, err_high] actual error bounds used
+%   err  : [err_low, err_high] actual error bounds used
 %
 % NOTE:
 % the antinorm is computed using aNorm, which by default uses the file
@@ -37,7 +37,7 @@ if nargin < 2 || isempty(dA),      dA = [];      end
 if nargin < 3 || isempty(delta),    delta = [1e-6;1e-6]; end
 if nargin < 4 || isempty(M),        M = 500;      end
 if nargin < 5 || isempty(V),        V = eye(ma);  end
-if nargin < 6 || isempty(errIn),    errIn = [];   end
+if nargin < 6 || isempty(err),    err = [];   end
 if nargin < 7 || isempty(Display),  Display = false; end
 
 delta = delta(:);
