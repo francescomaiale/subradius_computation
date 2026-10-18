@@ -8,7 +8,7 @@ This project contains MATLAB scripts for computing the subradius of a family of 
 - `real_antinorm.m`: Computes the polytope antinorm of a vector.
 - `real_antinorm_cvx.m`: Computes the polytope antinorm of a vector relying on the CVX solver. See the instructions in the file since it requires installing CVX before using it.
 - `aNorm.m`: Computes the polytope antinorm of a matrix. It can use real_antinorm (by default) or real_antinorm_cvx depending on the needs of the user.
-- `lsr_comp_standard.m`: The standard algorithm, in which the polytope antinorm is fixed at the beginning and does not change.
+- `lsr_comp.m`: The standard algorithm, in which the polytope antinorm is fixed at the beginning and does not change.
 - `adaptive_subradius_comp.m`: An adaptive variant that adds new vertices only if they improve the current antinorm.
 - `adaptive_eigenvectors_subradius_comp.m`: Another adaptive variant that further refines the antinorm by adding suitably rescaled eigenvectors. Note: As mentioned in the paper, this is the only variant without a theoretical result guaranteeing convergence.
 
@@ -28,6 +28,28 @@ To apply the perturbation theory to a matrix family of dxd matrices:
 2. Let `eps` be the size of the perturbation (e.g., between 10e-3 and 10e-7) and define the perturbed family `A_p = A + eps * Delta`.
 3. Apply the adaptive algorithms following `illustrative_example.m` depending on the context to the perturbed family A_p. Possibly, do so for several values of `eps` for a more complete picture.
 4. **Optional step:** Verify if the s.l.p. found for the perturbed family when `eps` is small is also a s.l.p. for the initial family when `eps = 0` using, for example, the polytopic algorithm.
+
+## Tests and numerical output
+
+The default solver requires MATLAB with Optimization Toolbox (`linprog`). From
+the repository folder, run the regression tests with:
+
+```matlab
+results = runtests('tests/test_adaptive_subradius.m');
+assertSuccess(results);
+```
+
+The tests cover the Section 5.1 example, matrix ordering and scaling, vertex
+pruning, independently known bounds, and the product associated with the
+reported upper bound. They also exercise loose tolerances that can empty the
+product queue before the reference product is reached.
+
+The routines return floating-point estimates, not interval-arithmetic
+certificates. A finite search budget can end before the requested accuracy is
+reached, and a complete product level can exceed the nominal budget `M`.
+In `illustrative_example.m`, the matrices are divided by `rho`; multiply both
+returned bounds by `rho` to recover the original scale. The eigenvector variant
+retains the convergence limitation stated above.
 
 ## License
 

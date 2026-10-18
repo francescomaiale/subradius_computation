@@ -189,6 +189,11 @@ while mm < M && LowRadius < HighRadius - delta(2)
                 NewJJ = NewJJ + 1;
                 LowRadius = min(LowRadius, NewLowBound(newIndex));
                 NewX((NewJJ-1)*n+1:NewJJ*n, :) = XX;
+                % Compact metadata with its retained product. Discarded
+                % products must not supply bounds to the next level.
+                NewNorm(NewJJ) = NewNorm(newIndex);
+                NewNormErr(NewJJ) = NewNormErr(newIndex);
+                NewLowBound(NewJJ) = NewLowBound(newIndex);
             end
         end
     end
@@ -200,6 +205,10 @@ while mm < M && LowRadius < HighRadius - delta(2)
     NormErr = NewNormErr(1:NewJJ);
     JJ      = NewJJ;
     MaxJJ   = max(JJ, MaxJJ);
+
+    % Account for the tolerance used to discard products (Algorithm 6,
+    % line 31), including when the retained queue is empty.
+    LowRadius = max(OldLowRadius, min(LowRadius, HighRadius - delta(1)));
     
     if (HighRadius - LowRadius) < (OldHighRadius - OldLowRadius)
         BestPower = mCount;
